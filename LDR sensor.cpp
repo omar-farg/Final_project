@@ -1,3 +1,4 @@
+#include <cmath>
 int temp;
 bool baby_awake = false;
 bool baby_crying = false;
