@@ -64,27 +64,27 @@ float get_temprerature(void){
 //updates the states of the fans and rgb led
 void update_fan_and_rgb(float temp){
   if(temp<25){
-    digitalWrite(BLUE, HIGH);
-    digitalWrite(GREEN, LOW);
-    digitalWrite(RED, LOW);
+    digitalWrite(BLUE, LOW);
+    digitalWrite(GREEN, HIGH);
+    digitalWrite(RED, HIGH);
     
     digitalWrite(IN1_PIN,LOW);
     digitalWrite(IN2_PIN,LOW);
     analogWrite(ENA_PIN, 0);
   }
   else if (temp>=25&&temp<=30) {
-    digitalWrite(BLUE, LOW);
-    digitalWrite(GREEN, HIGH);
-    digitalWrite(RED, LOW);
+    digitalWrite(BLUE, HIGH);
+    digitalWrite(GREEN, LOW);
+    digitalWrite(RED, HIGH);
 
     digitalWrite(IN1_PIN,HIGH);
     digitalWrite(IN2_PIN,LOW);
     analogWrite(ENA_PIN, 127);
   }
   else{
-    digitalWrite(BLUE, LOW);
-    digitalWrite(GREEN, LOW);
-    digitalWrite(RED, HIGH);
+    digitalWrite(BLUE, HIGH);
+    digitalWrite(GREEN, HIGH);
+    digitalWrite(RED, LOW);
 
     digitalWrite(IN1_PIN,HIGH);
     digitalWrite(IN2_PIN,LOW);
