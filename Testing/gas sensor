@@ -1,0 +1,25 @@
+const int gasSensor = PA_0;
+const int buzzer = PB_0;
+int threshold = 1500;
+
+void setup() {
+  pinMode(buzzer, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+
+  int gasValue = analogRead(gasSensor);
+
+  Serial.print("Gas Value: ");
+  Serial.println(gasValue);
+
+  if (gasValue > threshold) {
+    digitalWrite(buzzer, HIGH);
+  }
+  else {
+    digitalWrite(buzzer, LOW);
+  }
+
+  delay(500);
+}

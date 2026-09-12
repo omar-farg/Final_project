@@ -1,0 +1,25 @@
+from machine import Pin, ADC
+import time
+
+# Gas sensor analog output
+gas = ADC(Pin("PA0"))
+
+# Buzzer
+buzzer = Pin("PA1", Pin.OUT)
+
+# Gas threshold
+threshold = 20000
+
+while True:
+    value = gas.read_u16()
+
+    print("Gas value:", value)
+
+    if value > threshold:
+        buzzer.value(1)
+        print("GAS DETECTED! BUZZER ON")
+    else:
+        buzzer.value(0)
+        print("Normal")
+
+    time.sleep(0.5)

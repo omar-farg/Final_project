@@ -1,0 +1,342 @@
+#include <Servo.h>
+#include <math.h>
+
+// =====================================================
+// RGB LED - COMMON CATHODE
+// =====================================================
+// R -> PA2 through 220Ω
+// G -> PA3 through 220Ω
+// B -> PA4 through 220Ω
+// COM -> GND
+
+#define RED_PIN    PA2
+#define GREEN_PIN  PA3
+#define BLUE_PIN   PA4
+
+
+// =====================================================
+// NTC THERMISTOR
+// =====================================================
+// NTC Voltage Divider output -> PA1
+
+#define THERMISTOR_PIN PA1
+
+// NTC = 10kΩ at 25°C
+#define SERIES_RESISTOR     10000.0
+#define NOMINAL_RESISTANCE 10000.0
+#define NOMINAL_TEMPERATURE 25.0
+#define BETA_COEFFICIENT   3950.0
+
+
+// =====================================================
+// FAN MOTOR (L293D)
+// =====================================================
+#define ENA_PIN PB0 // PWM pin for speed control
+#define IN1_PIN PB6 // Motor direction 1
+#define IN2_PIN PB5 // Motor direction 2
+
+
+// =====================================================
+// PIR
+// =====================================================
+
+#define PIR_PIN PB12
+
+
+// =====================================================
+// GAS SENSOR DIGITAL
+// DO -> PA5
+// =====================================================
+
+#define GAS_PIN PA5
+
+
+// =====================================================
+// BUZZER
+// =====================================================
+
+#define BUZZER_PIN PA8
+
+
+// =====================================================
+// SERVO
+// =====================================================
+
+#define SERVO_PIN PA7
+
+Servo serv;
+
+
+// =====================================================
+// LDR
+// =====================================================
+
+#define LDR_PIN PA0
+
+#define LDR_THRESHOLD 2000
+
+
+// =====================================================
+// LAMP
+// =====================================================
+
+#define LAMP_PIN PB1
+
+
+// =====================================================
+// SERVO TIMING
+// =====================================================
+
+bool servoMoving = false;
+unsigned long servoStartTime = 0;
+#define SERVO_MOVE_TIME 5000
+
+
+// =====================================================
+// READ NTC TEMPERATURE
+// =====================================================
+
+float readNTCTemperature()
+{
+  int adcValue = analogRead(THERMISTOR_PIN);
+
+  // حماية من القيم غير الصحيحة
+  if (adcValue <= 0 || adcValue >= 4095)
+  {
+    return NAN;
+  }
+
+  // ===================================================
+  // حساب مقاومة الـ NTC
+  // ===================================================
+  float resistance;
+  resistance = SERIES_RESISTOR * ((float)adcValue / (4095.0 - adcValue));
+
+  // ===================================================
+  // Beta Equation
+  // ===================================================
+  float steinhart;
+  steinhart = resistance / NOMINAL_RESISTANCE;
+  steinhart = log(steinhart);
+  steinhart /= BETA_COEFFICIENT;
+  steinhart += 1.0 / (NOMINAL_TEMPERATURE + 273.15);
+  steinhart = 1.0 / steinhart;
+  steinhart -= 273.15;
+
+  return steinhart;
+}
+
+
+// =====================================================
+// TEMPERATURE -> RGB & FAN MOTOR (L293D)
+// HIGH = ON, LOW = OFF
+// =====================================================
+
+void updateRGB_and_FAN(float temp)
+{
+  // =========================================
+  // أقل من 33°C -> BLUE (Fan OFF)
+  // =========================================
+  if (temp < 33.0)
+  {
+    digitalWrite(RED_PIN, LOW);
+    digitalWrite(GREEN_PIN, LOW);
+    digitalWrite(BLUE_PIN, HIGH);
+    
+    // إيقاف المروحة
+    digitalWrite(IN1_PIN, LOW);
+    digitalWrite(IN2_PIN, LOW);
+    analogWrite(ENA_PIN, 0);
+
+    Serial.println("STATUS: Safe | RGB = BLUE | FAN = OFF");
+  }
+
+  // =========================================
+  // 33°C إلى 36°C -> GREEN (Fan 50%)
+  // =========================================
+  else if (temp >= 33.0 && temp < 36.0)
+  {
+    digitalWrite(RED_PIN, LOW);
+    digitalWrite(GREEN_PIN, HIGH);
+    digitalWrite(BLUE_PIN, LOW);
+
+    // تشغيل المروحة بنص السرعة
+    digitalWrite(IN1_PIN, HIGH);
+    digitalWrite(IN2_PIN, LOW);
+    analogWrite(ENA_PIN, 127);
+
+    Serial.println("STATUS: Warm | RGB = GREEN | FAN = 50%");
+  }
+
+  // =========================================
+  // أكبر من 36°C -> RED (Fan 100%)
+  // =========================================
+  else
+  {
+    digitalWrite(RED_PIN, HIGH);
+    digitalWrite(GREEN_PIN, LOW);
+    digitalWrite(BLUE_PIN, LOW);
+
+    // تشغيل المروحة بأقصى سرعة
+    digitalWrite(IN1_PIN, HIGH);
+    digitalWrite(IN2_PIN, LOW);
+    analogWrite(ENA_PIN, 255);
+
+    Serial.println("STATUS: Hot! | RGB = RED | FAN = 100%");
+  }
+}
+
+
+// =====================================================
+// PIR -> SERVO
+// =====================================================
+
+void checkPIR()
+{
+  int pirState = digitalRead(PIR_PIN);
+
+  if (!servoMoving && pirState == HIGH)
+  {
+    serv.write(90);
+    servoStartTime = millis();
+    servoMoving = true;
+    Serial.println("MOTION DETECTED -> SERVO 90 DEG");
+  }
+
+  if (servoMoving && (millis() - servoStartTime >= SERVO_MOVE_TIME))
+  {
+    serv.write(0);
+    servoMoving = false;
+    Serial.println("5 SECONDS PASSED -> SERVO 0 DEG");
+  }
+}
+
+
+// =====================================================
+// GAS DIGITAL DO -> BUZZER
+// =====================================================
+
+void checkGas()
+{
+  int gasState = digitalRead(GAS_PIN);
+
+  if (gasState == LOW)
+  {
+    digitalWrite(BUZZER_PIN, HIGH);
+    Serial.println("!!! GAS DETECTED !!!");
+  }
+  else
+  {
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+}
+
+
+// =====================================================
+// LDR -> LAMP
+// =====================================================
+
+void checkLDR()
+{
+  int lightValue = analogRead(LDR_PIN);
+
+  if (lightValue < LDR_THRESHOLD)
+  {
+    digitalWrite(LAMP_PIN, LOW);
+  }
+  else
+  {
+    digitalWrite(LAMP_PIN, HIGH);
+  }
+}
+
+
+// =====================================================
+// SETUP
+// =====================================================
+
+void setup()
+{
+  analogReadResolution(12);
+
+  // RGB Setup
+  pinMode(RED_PIN, OUTPUT);
+  pinMode(GREEN_PIN, OUTPUT);
+  pinMode(BLUE_PIN, OUTPUT);
+  digitalWrite(RED_PIN, LOW);
+  digitalWrite(GREEN_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
+  
+  // FAN Motor Setup (L293D)
+  pinMode(ENA_PIN, OUTPUT);
+  pinMode(IN1_PIN, OUTPUT);
+  pinMode(IN2_PIN, OUTPUT);
+  digitalWrite(IN1_PIN, LOW);
+  digitalWrite(IN2_PIN, LOW);
+  analogWrite(ENA_PIN, 0);
+
+  // Sensors Setup
+  pinMode(THERMISTOR_PIN, INPUT);
+  pinMode(PIR_PIN, INPUT);
+  pinMode(GAS_PIN, INPUT);
+  pinMode(LDR_PIN, INPUT);
+
+  // Actuators Setup
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  
+  pinMode(LAMP_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, LOW);
+
+  // Servo Setup
+  serv.attach(SERVO_PIN);
+  serv.write(0);
+
+  // Serial Setup
+  Serial.begin(9600);
+  delay(1000);
+  Serial.println("==============================");
+  Serial.println("STM32 SMART BABY SYSTEM");
+  Serial.println("SYSTEM STARTED");
+  Serial.println("==============================");
+}
+
+
+// =====================================================
+// LOOP
+// =====================================================
+
+void loop()
+{
+  // 1. Read & Handle Temperature (RGB + FAN)
+  float temperature = readNTCTemperature();
+  
+  if (!isnan(temperature))
+  {
+    Serial.print("Temperature = ");
+    Serial.print(temperature);
+    Serial.println(" C");
+    
+    updateRGB_and_FAN(temperature);
+  }
+  else
+  {
+    Serial.println("ERROR: NTC / ADC");
+    digitalWrite(RED_PIN, LOW);
+    digitalWrite(GREEN_PIN, LOW);
+    digitalWrite(BLUE_PIN, LOW);
+    
+    // Safety: Turn off fan if sensor fails
+    digitalWrite(IN1_PIN, LOW);
+    digitalWrite(IN2_PIN, LOW);
+    analogWrite(ENA_PIN, 0);
+  }
+
+  // 2. Process other sensors
+  checkPIR();
+  checkGas();
+  checkLDR();
+
+  Serial.println("------------------------------");
+  delay(100);
+}
